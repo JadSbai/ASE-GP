@@ -33,7 +33,6 @@ class Simulation:
         a = np.cbrt((sum(self.molecule.get_masses()) * units.m ** 3 * 1E-6) / (density * units.mol))
         self.molecule.set_cell((a, a, a))
         self.molecule.set_pbc((True, True, True))
-        # return cp(h2o.repeat(super_cell))
         self.system = self.molecule.repeat(self.super_cell)
 
     def print_energy(self):
@@ -67,4 +66,4 @@ class Simulation:
         self.system.set_calculator(self.calc)
         self.set_dynamics()
         self.dynamics.run(time)
-        write(f'/datasets/{self.molecule_name}_{self.calc_name}_db.xyz', self.db)
+        write(f'datasets/{self.molecule_name}_{self.calc_name}_db.xyz', self.db)
