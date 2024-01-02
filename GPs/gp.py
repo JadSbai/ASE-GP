@@ -127,6 +127,7 @@ class GP:
         plt.figure(figsize=(10, 5))
         plt.plot(range(len(self.validate_energy)), self.validate_energy, 'o')
         plt.plot(range(len(self.predictions)), self.predictions, 'x')
+        plt.title(f'Energy Prediction using {self.descriptor} descriptor')
         plt.legend(['True', 'Predicted'])
         plt.xlabel('Step')
         plt.ylabel('Energy (eV)')
