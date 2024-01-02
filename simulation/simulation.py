@@ -1,11 +1,14 @@
+import ase
 from ase.calculators.emt import EMT
 from ase.collections import g2
 from ase import units
 from ase.build import molecule
 import numpy as np
 from ase.md import Langevin
+from quippy.descriptors import Descriptor
 from quippy.potential import Potential
-from ase.io import write
+from ase.io import write, Trajectory, read
+from ase.visualize import view
 
 
 def print_names():
@@ -18,6 +21,7 @@ class Simulation:
         self.super_cell = super_cell
         self.calc_name = calc_name
         self.molecule_name = molecule_name
+        self.dataset_file = f'datasets/{self.molecule_name}_{self.calc_name}.traj'
         if calc_name == 'EMT':
             self.calc = EMT()
         elif calc_name == 'DFT':
@@ -26,6 +30,30 @@ class Simulation:
         self.system = None
         self.dynamics = None
         self.db = []
+        self.energies = []
+        self.train_positions = []
+        self.validate_positions = []
+
+    def calculate_soap_descriptors(self):
+        cutoff = 5.0
+        l_max = 6
+        n_max = 12
+        atom_sigma = 0.5
+        n_Z = 2
+        Z = "{1 8}"
+
+        soap_descriptor = Descriptor(
+            f"soap cutoff={cutoff} l_max={l_max} normalize=T n_max={n_max} atom_sigma={atom_sigma} n_Z={n_Z} Z={Z} n_species={n_Z} species_Z={Z}")
+        train_soap_data = [soap_descriptor.calc(atoms)['data'] for atoms in self.train_positions]
+        validate_soap_data = [soap_descriptor.calc(atoms)['data'] for atoms in self.validate_positions]
+        return train_soap_data, validate_soap_data
+
+    def calculate_distance_descriptors(self):
+        cutoff = 5.0
+        dist_descriptor = Descriptor(f"distance_2b Z1=1 Z2=8 cutoff={cutoff}")
+        train_dist_data = [dist_descriptor.calc(atoms)['data'] for atoms in self.train_positions]
+        validate_dist_data = [dist_descriptor.calc(atoms)['data'] for atoms in self.validate_positions]
+        return train_dist_data, validate_dist_data
 
     def make_system(self, density=1.0):
         """ Generates a supercell of desired molecules with a desired density.
@@ -49,21 +77,38 @@ class Simulation:
             self.system.get_kinetic_energy() / (1.5 * units.kB * len(self.system))
         ))
 
-    def collect_data(self):
-        self.db.append(self.system.copy())
-
-    def set_dynamics(self, time_step=1, friction=0.002):
+    def set_dynamics(self, time_step=1, friction=0.0002):
         """ Generates a dynamics object for the given atomic system with a desired time step and temperature.
             Temperature in Kelvin"""
         self.dynamics = Langevin(self.system, time_step * units.fs, self.temperature * units.kB, friction)
         self.dynamics.set_temperature(temperature_K=self.temperature * units.kB)
-        self.dynamics.attach(self.print_energy, interval=1)
+        # self.dynamics.attach(self.print_energy, interval=1)
         self.dynamics.attach(self.print_status, interval=10)
-        self.dynamics.attach(self.collect_data, interval=10)
+        traj = Trajectory(self.dataset_file, 'w', self.system)
+        self.dynamics.attach(traj.write, interval=5)
+
+    def get_energies(self):
+        train_energies = []
+        for state in self.train_positions:
+            train_energies.append(state.get_potential_energy())
+        validate_energies = []
+        for state in self.validate_positions:
+            validate_energies.append(state.get_potential_energy())
+        return train_energies, validate_energies
+
+    def view_system(self):
+        view(self.system, repeat=(3, 3, 3))
 
     def run(self, time=100):
         self.make_system()
         self.system.set_calculator(self.calc)
         self.set_dynamics()
         self.dynamics.run(time)
-        write(f'datasets/{self.molecule_name}_{self.calc_name}_db.xyz', self.db)
+        out_traj = ase.io.read(self.dataset_file, ':')
+        for at in out_traj:
+            at.wrap()
+            if 'momenta' in at.arrays: del at.arrays['momenta']
+        write('train.xyz', out_traj[0::2])
+        write('validate.xyz', out_traj[1::2])
+        self.train_positions = read('train.xyz', ':')
+        self.validate_positions = read('validate.xyz', ':')
