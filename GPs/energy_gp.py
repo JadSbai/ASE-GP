@@ -3,36 +3,37 @@ import numpy as np
 import matplotlib.pyplot as plt
 from GPy.models import GPRegression
 from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import DotProduct, WhiteKernel, ConstantKernel, RBF
+from sklearn.gaussian_process.kernels import DotProduct, RBF
 from sklearn.metrics import mean_squared_error
 from skopt import gp_minimize
 from skopt.space import Real
 
 
-class GP:
+class EnergyGP:
     def __init__(self, simulation, descriptor="soap"):
         self.simulation = simulation
         self.descriptor = descriptor
-        self.feature_size = 1
         self.train_positions, self.validate_positions = self.get_positions()
-        self.train_energy, self.validate_energy = simulation.get_energies()
+        self.feature_size = len(self.train_positions[0])
+        self.train_values, self.validate_values = self.simulation.get_energies()
         params = self.optimise_hyperparameters()
         self.kernel = self.get_kernel(params=params)
+        self.fit_model()
         self.model = self.get_model()
         self.predictions = []
 
     def get_kernel(self, params=None):
         if self.descriptor == "soap":
-            # params = [100, 0.12]
+            params = [100, 0.12]
             return DotProduct(sigma_0=params[0]) + RBF(length_scale=params[1])
         elif self.descriptor == "distance":
-            # params = [10, 10, 1]
+            params = [50, 10, 1]
             periodic_kernel = GPy.kern.PeriodicExponential(input_dim=1, active_dims=[0], variance=params[0])
             for dim in range(1, 20):
                 periodic_kernel += GPy.kern.PeriodicExponential(input_dim=1, active_dims=[dim], variance=params[0])
-            return GPy.kern.RBF(input_dim=self.feature_size, lengthscale=params[1], variance=params[2]) + periodic_kernel
+            return periodic_kernel
         else:
-            # params = [10]
+            params = [10]
             periodic_kernel = GPy.kern.PeriodicExponential(input_dim=1, active_dims=[0], variance=params[0])
             for dim in range(1, 20):
                 periodic_kernel += GPy.kern.PeriodicExponential(input_dim=1, active_dims=[dim], variance=params[0])
@@ -51,11 +52,11 @@ class GP:
             for i in range(len(train_positions)):
                 train_positions[i] = np.array(train_positions[i]).flatten()
                 train_positions[i] = np.pad(train_positions[i],
-                                                 (0, self.feature_size - len(train_positions[i])), 'constant')
+                                            (0, self.feature_size - len(train_positions[i])), 'constant')
             for i in range(len(validate_positions)):
                 validate_positions[i] = np.array(validate_positions[i]).flatten()
                 validate_positions[i] = np.pad(validate_positions[i],
-                                                    (0, self.feature_size - len(validate_positions[i])), 'constant')
+                                               (0, self.feature_size - len(validate_positions[i])), 'constant')
             train_positions = np.vstack(train_positions)
             validate_positions = np.vstack(validate_positions)
         else:
@@ -64,33 +65,31 @@ class GP:
 
         return train_positions, validate_positions
 
-    def fit_model_energy(self):
+    def fit_model(self):
         self.model = self.get_model()
         if self.descriptor == "soap":
-            self.model.fit(self.train_positions, self.train_energy)
+            self.model.fit(self.train_positions, self.train_values)
             y_pred = self.model.predict(self.validate_positions)
-            mse = mean_squared_error(self.validate_energy, y_pred)
+            mse = mean_squared_error(self.validate_values, y_pred)
         else:
-            validate_energy = np.array(self.validate_energy).reshape(-1, 1)
+            self.model.optimize()
+            validate = np.array(self.validate_values).reshape(-1, 1)
             y_pred, _ = self.model.predict(self.validate_positions)
-            mse = np.mean((validate_energy - y_pred) ** 2)
+            mse = np.mean((validate - y_pred) ** 2)
         self.predictions = y_pred
         print(f"MSE: {mse}")
         return mse
-
-    def fit_model_force(self):
-        pass
 
     def get_model(self):
         if self.descriptor == "soap":
             return GaussianProcessRegressor(kernel=self.kernel)
         else:
-            train_energy = np.array(self.train_energy).reshape(-1, 1)
-            return GPRegression(self.train_positions, train_energy, self.kernel)
+            train_values = np.array(self.train_values).reshape(-1, 1)
+            return GPRegression(self.train_positions, train_values, self.kernel)
 
     def objective_function(self, params):
         self.kernel = self.get_kernel(params)
-        return self.fit_model_energy()
+        return self.fit_model()
 
     def get_space(self):
         if self.descriptor == "soap":
@@ -125,7 +124,7 @@ class GP:
 
     def plot(self):
         plt.figure(figsize=(10, 5))
-        plt.plot(range(len(self.validate_energy)), self.validate_energy, 'o')
+        plt.plot(range(len(self.validate_values)), self.validate_values, 'o')
         plt.plot(range(len(self.predictions)), self.predictions, 'x')
         plt.title(f'Energy Prediction using {self.descriptor} descriptor')
         plt.legend(['True', 'Predicted'])
