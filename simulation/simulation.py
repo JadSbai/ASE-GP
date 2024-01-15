@@ -1,4 +1,5 @@
 import ase
+from ase.calculators.dftb import Dftb
 from ase.calculators.emt import EMT
 from ase.collections import g2
 from ase import units
@@ -9,6 +10,7 @@ from quippy.descriptors import Descriptor
 from quippy.potential import Potential
 from ase.io import write, Trajectory, read
 from ase.visualize import view
+
 
 
 def print_names():
@@ -24,8 +26,6 @@ class Simulation:
         self.dataset_file = f'datasets/{self.molecule_name}_{self.calc_name}.traj'
         if calc_name == 'EMT':
             self.calc = EMT()
-        elif calc_name == 'DFT':
-            self.calc = Potential('TB DFTB', param_filename='dftb-params.xml')
         self.temperature = 150  # Kelvin
         self.system = None
         self.dynamics = None
@@ -90,11 +90,24 @@ class Simulation:
     def get_energies(self):
         train_energies = []
         for state in self.train_positions:
-            train_energies.append(state.get_potential_energy())
+            state.calc = self.calc
+            train_energies.append(state.get_potential_energy(force_consistent=True))
         validate_energies = []
         for state in self.validate_positions:
-            validate_energies.append(state.get_potential_energy())
+            state.calc = self.calc
+            validate_energies.append(state.get_potential_energy(force_consistent=True))
+        print(train_energies, validate_energies)
         return train_energies, validate_energies
+
+    def get_forces(self):
+        train_forces = []
+        for state in self.train_positions:
+            train_forces.append(state.get_forces())
+        validate_forces = []
+        for state in self.validate_positions:
+            validate_forces.append(state.get_forces())
+        print(train_forces)
+        return train_forces, validate_forces
 
     def view_system(self):
         view(self.system, repeat=(3, 3, 3))
