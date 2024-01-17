@@ -26,7 +26,7 @@ class Simulation:
         self.dataset_file = f'datasets/{self.molecule_name}_{self.calc_name}.traj'
         if calc_name == 'EMT':
             self.calc = EMT()
-        self.temperature = 150  # Kelvin
+        self.temperature = 293  # Kelvin
         self.system = None
         self.dynamics = None
         self.db = []
@@ -85,7 +85,7 @@ class Simulation:
         # self.dynamics.attach(self.print_energy, interval=1)
         self.dynamics.attach(self.print_status, interval=10)
         traj = Trajectory(self.dataset_file, 'w', self.system)
-        self.dynamics.attach(traj.write, interval=5)
+        self.dynamics.attach(traj.write, interval=2)
 
     def get_energies(self):
         train_energies = []
@@ -96,7 +96,6 @@ class Simulation:
         for state in self.validate_positions:
             state.calc = self.calc
             validate_energies.append(state.get_potential_energy(force_consistent=True))
-        print(train_energies, validate_energies)
         return train_energies, validate_energies
 
     def get_forces(self):
@@ -106,7 +105,6 @@ class Simulation:
         validate_forces = []
         for state in self.validate_positions:
             validate_forces.append(state.get_forces())
-        print(train_forces)
         return train_forces, validate_forces
 
     def view_system(self):

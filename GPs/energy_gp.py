@@ -21,19 +21,20 @@ class EnergyGP:
         self.fit_model()
         self.model = self.get_model()
         self.predictions = []
+        self.variance = []
 
     def get_kernel(self, params=None):
         if self.descriptor == "soap":
-            params = [100, 0.12]
+            # params = [100, 0.12]
             return DotProduct(sigma_0=params[0]) + RBF(length_scale=params[1])
         elif self.descriptor == "distance":
-            params = [50, 10, 1]
+            # params = [50, 10, 1]
             periodic_kernel = GPy.kern.PeriodicExponential(input_dim=1, active_dims=[0], variance=params[0])
             for dim in range(1, 20):
                 periodic_kernel += GPy.kern.PeriodicExponential(input_dim=1, active_dims=[dim], variance=params[0])
             return periodic_kernel
         else:
-            params = [10]
+            # params = [10]
             periodic_kernel = GPy.kern.PeriodicExponential(input_dim=1, active_dims=[0], variance=params[0])
             for dim in range(1, 20):
                 periodic_kernel += GPy.kern.PeriodicExponential(input_dim=1, active_dims=[dim], variance=params[0])
@@ -69,14 +70,15 @@ class EnergyGP:
         self.model = self.get_model()
         if self.descriptor == "soap":
             self.model.fit(self.train_positions, self.train_values)
-            y_pred = self.model.predict(self.validate_positions)
+            y_pred, y_var = self.model.predict(self.validate_positions, return_std=True)
             mse = mean_squared_error(self.validate_values, y_pred)
         else:
             self.model.optimize()
             validate = np.array(self.validate_values).reshape(-1, 1)
-            y_pred, _ = self.model.predict(self.validate_positions)
+            y_pred, y_var = self.model.predict(self.validate_positions)
             mse = np.mean((validate - y_pred) ** 2)
         self.predictions = y_pred
+        self.variance = y_var
         print(f"MSE: {mse}")
         return mse
 
@@ -100,8 +102,6 @@ class EnergyGP:
         elif self.descriptor == "distance":
             return [
                 Real(1, 1e1, name='periodic_variance'),
-                Real(1e-1, 1e1, name='rbf_length_scale'),
-                Real(1, 1e1, name='rbf_variance'),
             ]
         else:
             return [
@@ -123,11 +123,26 @@ class EnergyGP:
         return result.x
 
     def plot(self):
+        # Sample data - replace with your actual data
+        steps = np.arange(len(self.validate_values))
+        true_values = np.array(self.validate_values)
+        predicted_values = np.array(self.predictions)
+        std_deviation = np.sqrt(self.variance)  # replace 'self.variance' with your variance array
+
+        # Plotting
         plt.figure(figsize=(10, 5))
-        plt.plot(range(len(self.validate_values)), self.validate_values, 'o')
-        plt.plot(range(len(self.predictions)), self.predictions, 'x')
+
+        # Plot true values
+        plt.plot(steps, true_values, 'o-', label='True')
+
+        # Plot predicted values
+        plt.plot(steps, predicted_values, 'x-', label='Predicted')
+
+        # Plot standard deviation (error bars)
+        plt.fill_between(steps, predicted_values - std_deviation, predicted_values + std_deviation, alpha=0.2)
+
         plt.title(f'Energy Prediction using {self.descriptor} descriptor')
-        plt.legend(['True', 'Predicted'])
         plt.xlabel('Step')
         plt.ylabel('Energy (eV)')
+        plt.legend()
         plt.show()
