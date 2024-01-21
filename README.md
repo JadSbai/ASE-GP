@@ -12,8 +12,6 @@ We also emply Bayesian Optimisation to find the optimal low-energy stable config
 - **Bayesian Optimization**: Utilizes Bayesian methods to efficiently search for stable, low-energy molecular conformations.
 
 ## Installation
-git clone [repository-url]
-cd [repository-name]
 pip install -r requirements.txt
 
 ## Usage
@@ -23,4 +21,4 @@ python main.py
 Obtained directly from running ASE simulations of Water molecules. 
 
 ## Full Report
-For more detailed information, see the [Full Project Report](/path/to/your/report.pdf).
+For more detailed information, see the [Full Project Report](/L48_project.pdf).
